@@ -28,8 +28,8 @@ const CORS_HEADERS = {
 // For a personal blog under moderate traffic this is rare and acceptable.
 // Max KV writes: 1 per FLUSH_INTERVAL_MS per key = 720/day at 2-min interval.
 // ---------------------------------------------------------------------------
-const writeBuffer = new Map(); // key → { pending: number, lastFlush: number }
-const FLUSH_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+export const writeBuffer = new Map(); // key → { pending: number, lastFlush: number }
+export const FLUSH_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
 async function flushKey(kvKey, env) {
   const buf = writeBuffer.get(kvKey);
