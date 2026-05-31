@@ -1,0 +1,46 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Configure KV namespace
+        env:
+          COUNTERS_KV_NAMESPACE_ID: ${{ secrets.COUNTERS_KV_NAMESPACE_ID }}
+        run: |
+          node -e "
+          const fs = require('fs');
+          const id = process.env.COUNTERS_KV_NAMESPACE_ID;
+          if (!id) throw new Error('COUNTERS_KV_NAMESPACE_ID secret is not set');
+          const file = 'wrangler.toml';
+          const config = fs.readFileSync(file, 'utf8').replace('YOUR_KV_NAMESPACE_ID', id);
+          fs.writeFileSync(file, config);
+          "
+
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SEED_TOKEN: ${{ secrets.SEED_TOKEN }}
+        run: npx wrangler deploy --var "SEED_TOKEN:$SEED_TOKEN"
