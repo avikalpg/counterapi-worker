@@ -25,12 +25,12 @@ GET /api/{namespace}/views/{key}
 ```
 Auto-increments on each request and returns `{ value, iconSvg }`.
 
-For an embeddable SVG badge:
+For a generic Markdown badge, use any namespace and key:
 ```md
 ![views](https://counter.YOUR_SUBDOMAIN.workers.dev/api/your-site.com/views/page-key?format=svg&label=views)
 ```
 
-For a GitHub repository README, keep the repository slug in the key position:
+For a GitHub repository README badge, use `github.com` as the namespace and keep the repository slug in the key:
 ```md
 ![README views](https://counter.YOUR_SUBDOMAIN.workers.dev/api/github.com/views/OWNER/REPO/readme?format=svg&label=README%20views)
 ```
@@ -87,7 +87,7 @@ fetch(`https://counter.YOUR_SUBDOMAIN.workers.dev/api/your-site.com/views/page-k
 
 That's it. The response shape is identical.
 
-For GitHub READMEs or HTML image badges, use the SVG format:
+For HTML image badges, use the SVG format:
 ```html
 <img src="https://counter.YOUR_SUBDOMAIN.workers.dev/api/your-site.com/views/page-key?format=svg&label=views" alt="Views" />
 ```
