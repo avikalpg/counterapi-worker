@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:production-durability": "node scripts/production-durability-check.mjs",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
