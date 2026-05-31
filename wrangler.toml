@@ -4,4 +4,4 @@ compatibility_date = "2024-01-01"
 
 [[kv_namespaces]]
 binding = "COUNTERS"
-id = "c236ff7074354c23860ac5916c4e5b53"
+id = "YOUR_KV_NAMESPACE_ID"  # Replace with your own: run `wrangler kv namespace create COUNTERS`
