@@ -229,6 +229,60 @@ describe('write buffer', () => {
     expect(kv.getWriteCalls()).toBeGreaterThan(writesBefore);
   });
 
+  it('no requests in any time window produces zero KV writes', async () => {
+    const kv = createKV();
+    writeBuffer.clear();
+
+    // Advance well past the flush interval without making any requests
+    vi.advanceTimersByTime(10 * FLUSH_INTERVAL_MS); // 20 minutes
+
+    expect(kv.getWriteCalls()).toBe(0);
+  });
+
+  it('50 requests in 3rd-4th minute: counter shows 50 at minutes 4 and 5; exactly 1 KV write when flushed', async () => {
+    const kv = createKV();
+    const env = makeEnv(kv);
+    const key = uid();
+    writeBuffer.clear();
+
+    // --- Minutes 1-2: silence ---
+    vi.advanceTimersByTime(2 * 60 * 1000);
+    expect(kv.getWriteCalls()).toBe(0); // idle = no writes
+
+    // --- Start of 3rd minute (t = 2min) ---
+    vi.advanceTimersByTime(60 * 1000); // t = 3min
+
+    // 50 view requests arrive in the 3rd-4th minute window.
+    // Buffer initialised on the first request (lastFlush = t3min).
+    // All 50 land within 2 min of lastFlush → no flush, 0 KV writes.
+    for (let i = 0; i < 50; i++) {
+      await json(`/api/${NS}/views/${key}`, { env });
+    }
+
+    // --- End of 4th minute (t = 4min) ---
+    vi.advanceTimersByTime(60 * 1000); // t = 4min
+
+    // readOnly check shows full 50 (stored=0 + pending=50).
+    // Still 0 KV writes — readOnly never writes, flush not yet triggered.
+    const atMin4 = await json(`/api/${NS}/views/${key}?readOnly=true`, { env });
+    expect(atMin4.body.value).toBe(50);
+    expect(kv.getWriteCalls()).toBe(0);
+
+    // --- 5th minute (t = 5min, i.e. 2 min since the burst started) ---
+    vi.advanceTimersByTime(60 * 1000 + 1); // t = 5min+1ms — past the flush threshold
+
+    // readOnly check in the 5th minute: same value, still 0 KV writes.
+    // (Lazy flush only triggers on the next non-readOnly request.)
+    const atMin5readOnly = await json(`/api/${NS}/views/${key}?readOnly=true`, { env });
+    expect(atMin5readOnly.body.value).toBe(50);
+    expect(kv.getWriteCalls()).toBe(0);
+
+    // Trigger flush with a regular (non-readOnly) view request.
+    // The 2-min threshold has elapsed → exactly 1 KV write for the whole batch.
+    await json(`/api/${NS}/views/${key}`, { env });
+    expect(kv.getWriteCalls()).toBe(1); // 50 requests → 1 write, not 50
+  });
+
   it('display value includes in-flight pending even before a flush', async () => {
     const kv = createKV();
     const env = makeEnv(kv);
