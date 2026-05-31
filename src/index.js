@@ -17,27 +17,86 @@ const CORS_HEADERS = {
 // ---------------------------------------------------------------------------
 // Write buffer — persists for the lifetime of this isolate instance.
 //
-// Structure: Map<kvKey, { pending: number, lastFlush: number }>
+// Structure: Map<kvKey, { pending: number, timer: Timeout | null, flushAt: number | null, flushing: boolean }>
 //
 // On each incrementing request:
 //   - pending++ (always, no KV write needed)
-//   - if (now - lastFlush) >= FLUSH_INTERVAL_MS: flush pending to KV, reset
+//   - if no flush timer exists, start one for FLUSH_INTERVAL_MS
+//   - when the timer fires, flush pending to KV and go quiet again
 //   - display value = KV stored value + pending (optimistic, always accurate)
 //
 // Worst case: isolate is evicted before a flush fires → pending counts lost.
 // For a personal blog under moderate traffic this is rare and acceptable.
 // Max KV writes: 1 per FLUSH_INTERVAL_MS per key = 720/day at 2-min interval.
 // ---------------------------------------------------------------------------
-export const writeBuffer = new Map(); // key → { pending: number, lastFlush: number }
+export const writeBuffer = new Map(); // key → { pending: number, timer: Timeout | null, flushAt: number | null, flushing: boolean }
 export const FLUSH_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+
+function clearBuffer(kvKey) {
+  const buf = writeBuffer.get(kvKey);
+  if (buf?.timer) clearTimeout(buf.timer);
+  writeBuffer.delete(kvKey);
+}
 
 async function flushKey(kvKey, env) {
   const buf = writeBuffer.get(kvKey);
-  if (!buf || buf.pending === 0) return;
-  const stored = parseInt(await env.COUNTERS.get(kvKey) || '0', 10);
-  await env.COUNTERS.put(kvKey, (stored + buf.pending).toString());
-  buf.pending = 0;
-  buf.lastFlush = Date.now();
+  if (!buf || buf.flushing) return;
+
+  if (buf.timer) {
+    clearTimeout(buf.timer);
+    buf.timer = null;
+  }
+
+  if (buf.pending === 0) {
+    writeBuffer.delete(kvKey);
+    return;
+  }
+
+  const pending = buf.pending;
+  buf.flushing = true;
+  buf.flushAt = null;
+
+  try {
+    const stored = parseInt(await env.COUNTERS.get(kvKey) || '0', 10);
+    await env.COUNTERS.put(kvKey, (stored + pending).toString());
+
+    const current = writeBuffer.get(kvKey);
+    if (!current) return;
+
+    current.pending -= pending;
+    current.flushing = false;
+
+    if (current.pending <= 0) {
+      writeBuffer.delete(kvKey);
+    } else if (!current.timer) {
+      scheduleFlush(kvKey, env);
+    }
+  } catch (e) {
+    const current = writeBuffer.get(kvKey);
+    if (current) {
+      current.flushing = false;
+      current.timer = null;
+      scheduleFlush(kvKey, env);
+    }
+    throw e;
+  }
+}
+
+function scheduleFlush(kvKey, env) {
+  const buf = writeBuffer.get(kvKey);
+  if (!buf || buf.timer) return;
+
+  buf.flushAt = Date.now() + FLUSH_INTERVAL_MS;
+  buf.timer = setTimeout(() => {
+    flushKey(kvKey, env).catch((e) => {
+      console.error('KV flush failed:', e.message);
+      const failedBuf = writeBuffer.get(kvKey);
+      if (failedBuf && failedBuf.pending > 0) {
+        failedBuf.timer = null;
+        scheduleFlush(kvKey, env);
+      }
+    });
+  }, FLUSH_INTERVAL_MS);
 }
 
 export default {
@@ -87,7 +146,7 @@ export default {
       const kvKey = `${type}:${namespace}:${key}`;
       await env.COUNTERS.put(kvKey, value.toString());
       // Reset buffer for this key so in-flight pending counts don't corrupt the seed
-      writeBuffer.delete(kvKey);
+      clearBuffer(kvKey);
       return new Response(JSON.stringify({ ok: true, kvKey, value }), { headers: CORS_HEADERS });
     }
 
@@ -106,7 +165,7 @@ export default {
         stored,
         pending: buf ? buf.pending : 0,
         displayValue: stored + (buf ? buf.pending : 0),
-        lastFlush: buf ? buf.lastFlush : null,
+        flushAt: buf ? buf.flushAt : null,
       }), { headers: CORS_HEADERS });
     }
 
@@ -130,30 +189,15 @@ export default {
       const buf = writeBuffer.get(kvKey);
       value = stored + (buf ? buf.pending : 0);
     } else {
-      // Increment: update buffer, flush to KV if interval has elapsed
+      // Increment: update buffer and start one delayed flush for this quiet window
       let buf = writeBuffer.get(kvKey);
       if (!buf) {
-        buf = { pending: 0, lastFlush: Date.now() };
+        buf = { pending: 0, timer: null, flushAt: null, flushing: false };
         writeBuffer.set(kvKey, buf);
       }
       buf.pending++;
       value = stored + buf.pending;
-
-      const now = Date.now();
-      if (now - buf.lastFlush >= FLUSH_INTERVAL_MS) {
-        // Flush synchronously — this request pays the write cost, next requests
-        // in this window are free (no KV write)
-        try {
-          await env.COUNTERS.put(kvKey, value.toString());
-          buf.pending = 0;
-          buf.lastFlush = now;
-        } catch (e) {
-          // KV write failed (quota exceeded etc.) — value already optimistic, carry on
-          console.error('KV flush failed:', e.message);
-        }
-      }
-      // If interval hasn't elapsed: no KV write this request. The next request
-      // that crosses the 2-minute boundary will flush the accumulated pending count.
+      scheduleFlush(kvKey, env);
     }
 
     const iconSvg = type === 'vote'
