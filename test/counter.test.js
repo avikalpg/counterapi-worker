@@ -132,6 +132,24 @@ describe('GET /api/:ns/views/:key', () => {
     expect(r2.body.value).toBe(before.body.value);
     expect(r3.body.value).toBe(before.body.value);
   });
+
+  it('returns an embeddable SVG badge when format=svg', async () => {
+    const kv = createKV();
+    const env = makeEnv(kv);
+    const key = uid();
+
+    const res = await fetch(`/api/${NS}/views/${key}?format=svg&label=repo%20views`, { env });
+    const body = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('image/svg+xml');
+    expect(body).toContain('<svg');
+    expect(body).toContain('repo views');
+    expect(body).toContain('1');
+
+    const current = await json(`/api/${NS}/views/${key}?readOnly=true`, { env });
+    expect(current.body.value).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

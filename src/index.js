@@ -14,6 +14,42 @@ const CORS_HEADERS = {
   'Content-Type': 'application/json',
 };
 
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function renderBadgeSvg({ type, value, label }) {
+  const displayLabel = label || (type === 'vote' ? 'likes' : 'views');
+  const displayValue = value.toLocaleString('en-US');
+  const labelWidth = Math.max(52, displayLabel.length * 7 + 24);
+  const valueWidth = Math.max(44, displayValue.length * 8 + 24);
+  const width = labelWidth + valueWidth;
+  const valueColor = type === 'vote' ? '#e11d48' : '#4f46e5';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="24" role="img" aria-label="${escapeXml(displayLabel)}: ${escapeXml(displayValue)}">
+  <title>${escapeXml(displayLabel)}: ${escapeXml(displayValue)}</title>
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#fff" stop-opacity=".08"/>
+    <stop offset="1" stop-opacity=".08"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="${width}" height="24" rx="4" fill="#fff"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="${labelWidth}" height="24" fill="#0f172a"/>
+    <rect x="${labelWidth}" width="${valueWidth}" height="24" fill="${valueColor}"/>
+    <rect width="${width}" height="24" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="11" font-weight="600">
+    <text x="${labelWidth / 2}" y="16">${escapeXml(displayLabel)}</text>
+    <text x="${labelWidth + valueWidth / 2}" y="16">${escapeXml(displayValue)}</text>
+  </g>
+</svg>`;
+}
+
 // ---------------------------------------------------------------------------
 // Write buffer — persists for the lifetime of this isolate instance.
 //
@@ -203,6 +239,18 @@ export default {
     const iconSvg = type === 'vote'
       ? (isReadOnly ? HEART_OUTLINE_SVG : HEART_FILLED_SVG)
       : EYE_SVG;
+
+    if (url.searchParams.get('format') === 'svg') {
+      const badgeSvg = renderBadgeSvg({
+        type,
+        value,
+        label: url.searchParams.get('label'),
+      });
+      return new Response(
+        badgeSvg,
+        { headers: { ...CORS_HEADERS, 'Content-Type': 'image/svg+xml; charset=utf-8' } }
+      );
+    }
 
     return new Response(
       JSON.stringify({ value, iconSvg }),

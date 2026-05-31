@@ -2,10 +2,15 @@
 
 A self-hosted drop-in replacement for [CounterAPI](https://counterapi.com) built on [Cloudflare Workers](https://workers.cloudflare.com/) + [KV](https://developers.cloudflare.com/kv/). CounterAPI went down in May 2026 without notice; this gives you the same API surface on infrastructure you own.
 
+![CounterAPI Worker README views](https://counter.avikalp.workers.dev/api/github.com/avikalpg/counterapi-worker/views/readme?format=svg&label=README%20views)
+
+This README uses the Worker above to count its own views. Dogfooding matters: the Markdown badge is a normal request to the hosted Worker, not a static screenshot.
+
 ## Features
 
 - **Same URL structure as CounterAPI** — swap one hostname and your existing JS keeps working
 - **Same response shape** — `{ value, iconSvg }` with matching Ionicon SVGs (eye for views, outline/filled heart for likes)
+- **Embeddable SVG badges** — add `?format=svg` for `<img>` tags and GitHub Markdown
 - **2-minute write buffer** — accumulates view increments in memory, flushes to KV once per 2-minute window per key. Max ~720 KV writes/day regardless of traffic, well within the free tier limit (1,000/day)
 - **Health endpoint** — `/health` for uptime monitoring
 - **Export endpoint** — dump all counter data as JSON for backup
@@ -19,6 +24,11 @@ A self-hosted drop-in replacement for [CounterAPI](https://counterapi.com) built
 GET /api/{namespace}/views/{key}
 ```
 Auto-increments on each request and returns `{ value, iconSvg }`.
+
+For an embeddable SVG badge:
+```md
+![views](https://counter.YOUR_SUBDOMAIN.workers.dev/api/your-site.com/views/page-key?format=svg&label=views)
+```
 
 ### Like counter (read)
 ```
@@ -71,6 +81,11 @@ fetch(`https://counter.YOUR_SUBDOMAIN.workers.dev/api/your-site.com/views/page-k
 ```
 
 That's it. The response shape is identical.
+
+For GitHub READMEs or HTML image badges, use the SVG format:
+```html
+<img src="https://counter.YOUR_SUBDOMAIN.workers.dev/api/your-site.com/views/page-key?format=svg&label=views" alt="Views" />
+```
 
 If you were using the `c.js` embed script (`<div class="counterapi" ...>`), see the [counter.js](https://github.com/avikalpg/avikalpg.github.io/blob/master/counter.js) drop-in replacement in the companion site repo.
 
