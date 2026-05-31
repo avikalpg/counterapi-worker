@@ -2,7 +2,7 @@
 
 A self-hosted drop-in replacement for [CounterAPI](https://counterapi.com) built on [Cloudflare Workers](https://workers.cloudflare.com/) + [KV](https://developers.cloudflare.com/kv/). CounterAPI went down in May 2026 without notice; this gives you the same API surface on infrastructure you own.
 
-![CounterAPI Worker README views](https://counter.avikalp.workers.dev/api/github.com/avikalpg/counterapi-worker/views/readme?format=svg&label=README%20views)
+![CounterAPI Worker README views](https://counter.avikalp.workers.dev/api/github.com/views/avikalpg/counterapi-worker/readme?format=svg&label=README%20views)
 
 This README uses the Worker above to count its own views. Dogfooding matters: the Markdown badge is a normal request to the hosted Worker, not a static screenshot.
 
@@ -28,6 +28,11 @@ Auto-increments on each request and returns `{ value, iconSvg }`.
 For an embeddable SVG badge:
 ```md
 ![views](https://counter.YOUR_SUBDOMAIN.workers.dev/api/your-site.com/views/page-key?format=svg&label=views)
+```
+
+For a GitHub repository README, keep the repository slug in the key position:
+```md
+![README views](https://counter.YOUR_SUBDOMAIN.workers.dev/api/github.com/views/OWNER/REPO/readme?format=svg&label=README%20views)
 ```
 
 ### Like counter (read)
