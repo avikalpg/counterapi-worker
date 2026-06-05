@@ -44,3 +44,11 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           SEED_TOKEN: ${{ secrets.SEED_TOKEN }}
         run: npx wrangler deploy --var "SEED_TOKEN:$SEED_TOKEN"
+
+      - name: Wait for deployment to propagate
+        run: sleep 10
+
+      - name: Run production durability canary
+        env:
+          COUNTER_BASE_URL: https://counter.avikalp.workers.dev
+        run: npm run test:production-durability
